@@ -1,0 +1,43 @@
+--- a/drivers/input/joystick/xpad.c	2016-12-03 15:42:56.006344205 -0600
++++ b/drivers/input/joystick/xpad.c	2016-12-03 15:57:06.049338890 -0600
+@@ -81,6 +81,32 @@
+ #include <linux/module.h>
+ #include <linux/usb/input.h>
+ 
++/* EMG: Steam for linux pays attention, not to the button event, but the position of
++ *      a button to determine "big picture". Steam listen for exactly the ninth but-
++ *      ton (the Guide button, normally - 8th (zero-based) in output of jstest) to
++ *      display the client window. what makes this annoying is that it does this even
++ *      if the client doesn't have foucs, or even the X server it's running in.
++ *
++ *      I can't just assign a new button prior to BTN_MODE because the buttons are
++ *      ordered based on their signal value in /usr/include/linux/input.h. According
++ *      to that file, there is no button assigned to signal 0x13f. So, what I do is
++ *      move three buttons backwards by one and use the now opes 0x13c as my skip
++ *      button.
++ */
++#define BTN_SKIP		0x13c
++#ifdef BTN_MODE
++#undef BTN_MODE     //  0x13c
++#define BTN_MODE        0x13d
++#endif
++#ifdef BTN_THUMBL
++#undef BTN_THUMBL   //  0x13d
++#define BTN_THUMBL      0x13e
++#endif
++#ifdef BTN_THUMBR
++#undef BTN_THUMBR   //  0x13d
++#define BTN_THUMBR      0x13f
++#endif
++
+ #define DRIVER_AUTHOR "Marko Friedemann <mfr@bmx-chemnitz.de>"
+ #define DRIVER_DESC "X-Box pad driver"
+ 
+@@ -245,6 +271,7 @@
+ 
+ static const signed short xpad360_btn[] = {  /* buttons for x360 controller */
+ 	BTN_TL, BTN_TR,		/* Button LB/RB */
++    BTN_SKIP,       /* spacer */
+ 	BTN_MODE,		/* The big X button */
+ 	-1
+ };

@@ -1,0 +1,256 @@
+diff --git a/src/Screen.cc b/src/Screen.cc
+index 453789f..8d9cbd5 100644
+--- a/src/Screen.cc
++++ b/src/Screen.cc
+@@ -240,7 +240,7 @@ BScreen::BScreen(FbTk::ResourceManager &rm,
+ 
+     rootWindow().setEventMask(ColormapChangeMask | EnterWindowMask | PropertyChangeMask |
+                               SubstructureRedirectMask | KeyPressMask | KeyReleaseMask |
+-                              ButtonPressMask | ButtonReleaseMask| SubstructureNotifyMask);
++                              ButtonReleaseMask| SubstructureNotifyMask);
+ 
+     fluxbox->sync(false);
+ 
+diff --git a/src/FocusControl.cc b/src/FocusControl.cc
+index f0d88b9..a484928 100644
+--- a/src/FocusControl.cc
++++ b/src/FocusControl.cc
+@@ -494,7 +494,7 @@ void FocusControl::shutdown() {
+  * This function is called whenever we aren't quite sure what
+  * focus is meant to be, it'll make things right ;-)
+  */
+-void FocusControl::revertFocus(BScreen &screen) {
++void FocusControl::revertFocus(BScreen &screen, bool force) {
+     if (s_reverting || screen.isShuttingdown())
+         return;
+ 
+@@ -506,7 +506,7 @@ void FocusControl::revertFocus(BScreen &screen) {
+         FocusControl::s_reverting = true;
+ 
+     // if setting focus fails, or isn't possible, fallback correctly
+-    if (!(next_focus && next_focus->focus())) {
++    if (force || !(next_focus && next_focus->focus())) {
+ 
+         setFocusedWindow(0); // so we don't get dangling m_focused_window pointer
+         // if there's a menu open, focus it
+diff --git a/src/FocusControl.hh b/src/FocusControl.hh
+index d583d16..b6579bb 100644
+--- a/src/FocusControl.hh
++++ b/src/FocusControl.hh
+@@ -149,7 +149,7 @@ public:
+     void shutdown();
+ 
+     /// do fallback focus for screen if normal focus control failed.
+-    static void revertFocus(BScreen &screen);
++    static void revertFocus(BScreen &screen, bool force = false);
+     // like revertFocus, but specifically related to this window (transients etc)
+     static void unfocusWindow(WinClient &client, bool full_revert = true, bool unfocus_frame = false);
+     static void setFocusedWindow(WinClient *focus_to);
+diff --git a/src/Screen.cc b/src/Screen.cc
+index 2b5411d..453789f 100644
+--- a/src/Screen.cc
++++ b/src/Screen.cc
+@@ -306,7 +306,7 @@ BScreen::BScreen(FbTk::ResourceManager &rm,
+     if (keys)
+         keys->registerWindow(rootWindow().window(), *this,
+                              Keys::GLOBAL|Keys::ON_DESKTOP);
+-    rootWindow().setCursor(XCreateFontCursor(disp, XC_left_ptr));
++    rootWindow().setCursor(XCreateFontCursor(disp, XC_X_cursor));
+ 
+     // load this screens resources
+     fluxbox->load_rc(*this);
+diff --git a/src/Screen.hh b/src/Screen.hh
+index 983aa81..8447b49 100644
+--- a/src/Screen.hh
++++ b/src/Screen.hh
+@@ -93,6 +93,7 @@ public:
+     bool isRootColormapInstalled() const { return root_colormap_installed; }
+     bool isScreenManaged() const { return m_state.managed; }
+     bool isWorkspaceWarping() const { return (m_workspaces_list.size() > 1) && *resource.workspace_warping; }
++    bool warpCursorOnResize() const { return *resource.warp_cursor_on_resize; }
+     bool doAutoRaise() const { return *resource.auto_raise; }
+     bool clickRaises() const { return *resource.click_raises; }
+     bool doOpaqueMove() const { return *resource.opaque_move; }
+diff --git a/src/ScreenResource.cc b/src/ScreenResource.cc
+index 0d8aaf7..aff3ac3 100644
+--- a/src/ScreenResource.cc
++++ b/src/ScreenResource.cc
+@@ -87,6 +87,7 @@ ScreenResource::ScreenResource(FbTk::ResourceManager& rm,
+     max_ignore_inc(rm, true, scrname+".maxIgnoreIncrement", altscrname+".MaxIgnoreIncrement"),
+     max_disable_move(rm, false, scrname+".maxDisableMove", altscrname+".MaxDisableMove"),
+     max_disable_resize(rm, false, scrname+".maxDisableResize", altscrname+".MaxDisableResize"),
++    warp_cursor_on_resize(rm, false, scrname+".warpCursorOnResize", altscrname+"WarpCursorOnResize"),
+     workspace_warping(rm, true, scrname+".workspacewarping", altscrname+".WorkspaceWarping"),
+     show_window_pos(rm, false, scrname+".showwindowposition", altscrname+".ShowWindowPosition"),
+     auto_raise(rm, true, scrname+".autoRaise", altscrname+".AutoRaise"),
+diff --git a/src/ScreenResource.hh b/src/ScreenResource.hh
+index 3a6eaa1..e234ee9 100644
+--- a/src/ScreenResource.hh
++++ b/src/ScreenResource.hh
+@@ -36,6 +36,7 @@ struct ScreenResource {
+        max_ignore_inc, 
+        max_disable_move,
+        max_disable_resize,
++       warp_cursor_on_resize,
+        workspace_warping,
+        show_window_pos,
+        auto_raise,
+diff --git a/src/Window.cc b/src/Window.cc
+index 0f91a9e..7b63540 100644
+--- a/src/Window.cc
++++ b/src/Window.cc
+@@ -1661,6 +1661,8 @@ void FluxboxWindow::lower() {
+ 
+     if (client->fbwindow())
+         lowerFluxboxWindow(*client->fbwindow());
++
++    screen().focusControl().revertFocus(screen(), true);
+ }
+ 
+ void FluxboxWindow::tempRaise() {
+@@ -3018,7 +3020,7 @@ FluxboxWindow::ReferenceCorner FluxboxWindow::getResizeDirection(int x, int y,
+     return RIGHTBOTTOM;
+ }
+ 
+-void FluxboxWindow::startResizing(int x, int y, ReferenceCorner dir) {
++void FluxboxWindow::startResizing(int event_x, int event_y, ReferenceCorner dir) {
+ 
+     if (isResizing())
+         return;
+@@ -3044,17 +3046,89 @@ void FluxboxWindow::startResizing(int x, int y, ReferenceCorner dir) {
+                            (m_resize_corner == BOTTOM) ? frame().theme()->bottomSideCursor() :
+                                                             frame().theme()->lowerLeftAngleCursor();
+ 
+-    grabPointer(fbWindow().window(),
+-                false, ButtonMotionMask | ButtonReleaseMask,
+-                GrabModeAsync, GrabModeAsync, None, cursor, CurrentTime);
++    /* EMG: Start of "Warp Curor on Resize" patch.
++     * 	I saw once .. don't remember where, (fluxbox issue-tracker I think)
++     * 	that window outlines would draw weird if the display wasn't grabbed.
++     * */
++    if (screen().warpCursorOnResize() ) {
++        // need to adjust the 'event origin' so that fluxbox'
++        //    claculations of resizing aren't messed up.
++        switch(m_resize_corner) {
++            // the four corners; directly
++            // offset is wrong. (x, y) are given in relation to origin of the screen
++            //    and the warp is done in relation to the window.
++            case LEFTTOP:
++                m_button_grab_x = 0;
++                m_button_grab_y = 0;
++                break;
++            case RIGHTTOP:
++                m_button_grab_x = frame().width();
++                m_button_grab_y = 0;
++                break;
++            case RIGHTBOTTOM:
++                m_button_grab_x = frame().width();
++                m_button_grab_y = frame().height();
++                break;
++            case LEFTBOTTOM:
++                m_button_grab_x = 0;
++                m_button_grab_y = frame().height();
++                break;
++
++            // the four edges; warp to edge only (in one direction)
++            case LEFT:
++                m_button_grab_x = 0;
++                m_button_grab_y = event_y;
++                break;
++            case TOP:
++                m_button_grab_x = event_x;
++                m_button_grab_y = 0;
++                break;
++            case RIGHT:
++                m_button_grab_x = frame().width();
++                m_button_grab_y = event_y;
++                break;
++            case BOTTOM:
++                m_button_grab_x = event_x;
++                m_button_grab_y = frame().height();
++                break;
++
++            // sane defaults (the original event origin)
++            default:
++                m_button_grab_x = event_x;
++                m_button_grab_y = event_y;
++                break;
++        }
++
++        // grab the point in _non-async_ mode; this will prevent
++        //    emitting events when we warp the cursor.
++        grabPointer(fbWindow().window(),
++                    false, ButtonReleaseMask,
++                    GrabModeAsync, GrabModeSync, None, cursor, CurrentTime);
++
++        XWarpPointer(display, None, fbWindow().window(), 0, 0, 0, 0,
++            m_button_grab_x,
++            m_button_grab_y
++        );
++        // release the cursor back to fluxbox
++        ungrabPointer(CurrentTime);
++    } else {
++        // otherwise, leave the cursor where the event originated.
++        m_button_grab_x = event_x;
++        m_button_grab_y = event_y;
++    }
+ 
+-    m_button_grab_x = x;
+-    m_button_grab_y = y;
+     m_last_resize_x = frame().x();
+     m_last_resize_y = frame().y();
+     m_last_resize_w = frame().width();
+     m_last_resize_h = frame().height();
+ 
++	// grab the display to prevent the outline from being clobbered.
++    XGrabServer(display);
++    grabPointer(fbWindow().window(),
++                false, ButtonMotionMask | ButtonReleaseMask,
++                GrabModeAsync, GrabModeAsync, None, cursor, CurrentTime);
++    /* EMG: End of "Warp Curor on Resize" patch. */
++
+     fixSize();
+     frame().displaySize(m_last_resize_w, m_last_resize_h);
+ 
+@@ -3082,6 +3156,8 @@ void FluxboxWindow::stopResizing(bool interrupted) {
+     }
+ 
+     ungrabPointer(CurrentTime);
++    // return control of the display to the server
++    XUngrabServer(display);
+ }
+ 
+ WinClient* FluxboxWindow::winClientOfLabelButtonWindow(Window window) {
+diff --git a/src/fluxbox.cc b/src/fluxbox.cc
+index 7b73360..86f3911 100644
+--- a/src/fluxbox.cc
++++ b/src/fluxbox.cc
+@@ -754,12 +754,10 @@ void Fluxbox::handleEvent(XEvent * const e) {
+         }
+     } break;
+     case FocusIn: {
+-
+         // a grab is something of a pseudo-focus event, so we ignore
+         // them, here we ignore some window receiving it
+         if (e->xfocus.mode == NotifyGrab ||
+             e->xfocus.mode == NotifyUngrab ||
+-            e->xfocus.detail == NotifyPointer ||
+             e->xfocus.detail == NotifyInferior)
+             break;
+ 
+@@ -946,8 +944,15 @@ void Fluxbox::windowStateChanged(FluxboxWindow &win) {
+     if (win.isIconic()) {
+         win.screen().addIcon(&win);
+         Workspace *space = win.screen().getWorkspace(win.workspaceNumber());
++        /* EMG: An iconified window is removed from the 'active window
++         *      lists so that it's not restored on workspace switching.
++         *      This is the one difference between fluxbox and evil that
++         *      I was coming to grips with. By taking this out, Fluxbox
++         *      will still be able to track icons, but they'll be restored
++         *      when the workspace changes.
+         if (space != 0)
+             space->removeWindow(&win, true);
++         */
+     }
+ 
+     if (win.isStuck()) {

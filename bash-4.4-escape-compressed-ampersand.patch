@@ -1,0 +1,260 @@
+diff --git a/builtins/set.def b/builtins/set.def
+index 8122361..2467e73 100644
+--- a/builtins/set.def
++++ b/builtins/set.def
+@@ -59,7 +59,7 @@ extern int no_line_editing;
+ 
+ $BUILTIN set
+ $FUNCTION set_builtin
+-$SHORT_DOC set [-abefhkmnptuvxBCHP] [-o option-name] [--] [arg ...]
++$SHORT_DOC set [-abcefhkmnptuvxBCHP] [-o option-name] [--] [arg ...]
+ Set or unset values of shell options and positional parameters.
+ 
+ Change the value of shell attributes and positional parameters, or
+@@ -68,6 +68,7 @@ display the names and values of shell variables.
+ Options:
+   -a  Mark variables which are modified or created for export.
+   -b  Notify of job termination immediately.
++  -c  Escape a single ampersand surrounded by non-blank/non-meta text.
+   -e  Exit immediately if a command exits with a non-zero status.
+   -f  Disable file name generation (globbing).
+   -h  Remember the location of commands as they are looked up.
+@@ -77,50 +78,51 @@ Options:
+   -n  Read commands but do not execute them.
+   -o option-name
+       Set the variable corresponding to option-name:
+-          allexport    same as -a
+-          braceexpand  same as -B
++          allexport      same as -a
++          braceexpand    same as -B
++          compressedand  same as -c
+ #if defined (READLINE)
+-          emacs        use an emacs-style line editing interface
++          emacs          use an emacs-style line editing interface
+ #endif /* READLINE */
+-          errexit      same as -e
+-          errtrace     same as -E
+-          functrace    same as -T
+-          hashall      same as -h
++          errexit        same as -e
++          errtrace       same as -E
++          functrace      same as -T
++          hashall        same as -h
+ #if defined (BANG_HISTORY)
+-          histexpand   same as -H
++          histexpand     same as -H
+ #endif /* BANG_HISTORY */
+ #if defined (HISTORY)
+-          history      enable command history
++          history        enable command history
+ #endif
+-          ignoreeof    the shell will not exit upon reading EOF
++          ignoreeof      the shell will not exit upon reading EOF
+           interactive-comments
+-                       allow comments to appear in interactive commands
+-          keyword      same as -k
++                         allow comments to appear in interactive commands
++          keyword        same as -k
+ #if defined (JOB_CONTROL)
+-          monitor      same as -m
++          monitor        same as -m
+ #endif
+-          noclobber    same as -C
+-          noexec       same as -n
+-          noglob       same as -f
+-          nolog        currently accepted but ignored
++          noclobber      same as -C
++          noexec         same as -n
++          noglob         same as -f
++          nolog          currently accepted but ignored
+ #if defined (JOB_CONTROL)
+-          notify       same as -b
++          notify         same as -b
+ #endif
+-          nounset      same as -u
+-          onecmd       same as -t
+-          physical     same as -P
+-          pipefail     the return value of a pipeline is the status of
+-                       the last command to exit with a non-zero status,
+-                       or zero if no command exited with a non-zero status
+-          posix        change the behavior of bash where the default
+-                       operation differs from the Posix standard to
+-                       match the standard
+-          privileged   same as -p
+-          verbose      same as -v
++          nounset        same as -u
++          onecmd         same as -t
++          physical       same as -P
++          pipefail       the return value of a pipeline is the status of
++                         the last command to exit with a non-zero status,
++                         or zero if no command exited with a non-zero status
++          posix          change the behavior of bash where the default
++                         operation differs from the Posix standard to
++                         match the standard
++          privileged     same as -p
++          verbose        same as -v
+ #if defined (READLINE)
+-          vi           use a vi-style line editing interface
++          vi             use a vi-style line editing interface
+ #endif /* READLINE */
+-          xtrace       same as -x
++          xtrace         same as -x
+   -p  Turned on whenever the real and effective user ids do not match.
+       Disables processing of the $ENV file and importing of shell
+       functions.  Turning this option off causes the effective uid and
+@@ -197,6 +199,7 @@ const struct {
+ #if defined (BRACE_EXPANSION)
+   { "braceexpand",'B', (int *)NULL, (setopt_set_func_t *)NULL, (setopt_get_func_t *)NULL  },
+ #endif
++  { "compressedand", 'c', (int *)NULL, (setopt_set_func_t *)NULL, (setopt_get_func_t *)NULL  },
+ #if defined (READLINE)
+   { "emacs",     '\0', (int *)NULL, set_edit_mode, get_edit_mode },
+ #endif
+diff --git a/doc/bash.1 b/doc/bash.1
+index 9a7a384..f2d33d9 100644
+--- a/doc/bash.1
++++ b/doc/bash.1
+@@ -9019,10 +9019,10 @@ function and not during execution of a script by \fB.\fP\^ or \fBsource\fP.
+ Any command associated with the \fBRETURN\fP trap is executed
+ before execution resumes after the function or script.
+ .TP
+-\fBset\fP [\fB\-\-abefhkmnptuvxBCEHPT\fP] [\fB\-o\fP \fIoption\-name\fP] [\fIarg\fP ...]
++\fBset\fP [\fB\-\-abcefhkmnptuvxBCEHPT\fP] [\fB\-o\fP \fIoption\-name\fP] [\fIarg\fP ...]
+ .PD 0
+ .TP
+-\fBset\fP [\fB+abefhkmnptuvxBCEHPT\fP] [\fB+o\fP \fIoption\-name\fP] [\fIarg\fP ...]
++\fBset\fP [\fB+abcefhkmnptuvxBCEHPT\fP] [\fB+o\fP \fIoption\-name\fP] [\fIarg\fP ...]
+ .PD
+ Without options, the name and value of each shell variable are displayed
+ in a format that can be reused as input
+@@ -9051,6 +9051,10 @@ Report the status of terminated background jobs
+ immediately, rather than before the next primary prompt.  This is
+ effective only when job control is enabled.
+ .TP 8
++.B \-c
++Escape a single ampersand if surrounded by non-blank or non-meta
++characters.
++.TP 8
+ .B \-e
+ Exit immediately if a
+ \fIpipeline\fP (which may consist of a single \fIsimple command\fP),
+@@ -9141,6 +9145,10 @@ Same as
+ Same as
+ .BR \-B .
+ .TP 8
++.B compressedand
++Same as
++.BR \-c .
++.TP 8
+ .B emacs
+ Use an emacs-style command line editing interface.  This is enabled
+ by default when the shell is interactive, unless the shell is started
+diff --git a/doc/bash.info b/doc/bash.info
+index fac6786..d79e19d 100644
+--- a/doc/bash.info
++++ b/doc/bash.info
+@@ -3950,8 +3950,8 @@ allows you to change the values of shell options and set the positional
+ parameters, or to display the names and values of shell variables.
+ 
+ 'set'
+-          set [--abefhkmnptuvxBCEHPT] [-o OPTION-NAME] [ARGUMENT ...]
+-          set [+abefhkmnptuvxBCEHPT] [+o OPTION-NAME] [ARGUMENT ...]
++          set [--abcefhkmnptuvxBCEHPT] [-o OPTION-NAME] [ARGUMENT ...]
++          set [+abcefhkmnptuvxBCEHPT] [+o OPTION-NAME] [ARGUMENT ...]
+ 
+      If no options or arguments are supplied, 'set' displays the names
+      and values of all shell variables and functions, sorted according
+@@ -3973,6 +3973,10 @@ parameters, or to display the names and values of shell variables.
+           immediately, rather than before printing the next primary
+           prompt.
+ 
++     '-c'
++          Escape a single ampersand when surrounded by non-blank or
++          non-meta characters.
++
+      '-e'
+           Exit immediately if a pipeline (*note Pipelines::), which may
+           consist of a single simple command (*note Simple Commands::),
+@@ -4035,6 +4039,9 @@ parameters, or to display the names and values of shell variables.
+           'braceexpand'
+                Same as '-B'.
+ 
++          'compressedand'
++               Same as '-c'.
++
+           'emacs'
+                Use an 'emacs'-style line editing interface (*note
+                Command Line Editing::).  This also affects the editing
+diff --git a/flags.c b/flags.c
+index 4b94fb0..d41eb1d 100644
+--- a/flags.c
++++ b/flags.c
+@@ -92,6 +92,10 @@ int unbound_vars_is_error = 0;
+ int echo_input_at_read = 0;
+ int verbose_flag = 0;
+ 
++/* Non-zero means to escape a single ampersand surrounded by non-blank or
++   non-meta charcters; `echo this&that` -> "this&that" */
++int compressedand = 0;
++
+ /* Non-zero means type out the command definition after reading, but
+    before executing. */
+ int echo_command_at_execute = 0;
+@@ -183,6 +187,7 @@ const struct flags_alist shell_flags[] = {
+ #if defined (JOB_CONTROL)
+   { 'b', &asynchronous_notification },
+ #endif /* JOB_CONTROL */
++  { 'c', &compressedand },
+   { 'e', &errexit_flag },
+   { 'f', &disallow_filename_globbing },
+   { 'h', &hashing_enabled },
+@@ -368,6 +373,8 @@ reset_shell_flags ()
+   exit_immediately_on_error = errexit_flag = 0;
+   echo_input_at_read = verbose_flag = 0;
+ 
++  compressedand = 0;
++
+   hashing_enabled = interactive_comments = 1;
+ 
+ #if defined (JOB_CONTROL)
+diff --git a/flags.h b/flags.h
+index d5ed334..ff44a45 100644
+--- a/flags.h
++++ b/flags.h
+@@ -42,7 +42,7 @@ extern char optflags[];
+ 
+ extern int
+   mark_modified_vars, errexit_flag, exit_immediately_on_error,
+-  disallow_filename_globbing,
++  disallow_filename_globbing, compressedand,
+   place_keywords_in_env, read_but_dont_execute,
+   just_one_command, unbound_vars_is_error, echo_input_at_read, verbose_flag,
+   echo_command_at_execute, no_invisible_vars, noclobber,
+diff --git a/parse.y b/parse.y
+index f415d2e..e2adce4 100644
+--- a/parse.y
++++ b/parse.y
+@@ -4732,6 +4732,23 @@ read_token_word (character)
+ 
+       cd = current_delimiter (dstack);
+ 
++	/* 2020-04-21 EMP: Added a "compressed ampersand" logic that would automatically
++           escape the ampersand if it was surrounded by something that wasn't a space or
++           another meta character. the latter preserves special function of various dbl-
++           meta specials like redirects and AND_AND regardless of bounding.
++           this is all to allow unquoted URLs that have multiple query parameters. */
++        if (compressedand) {
++	    if MBTEST(character == '&') {
++		peek_char = shell_getc(0);
++		shell_ungetc(peek_char);
++
++		if MBTEST(!shellblank(peek_char) && !shellmeta(peek_char)) {
++		    pass_next_character++;
++		    goto got_character;
++		}
++	    }
++	}
++
+       /* Handle backslashes.  Quote lots of things when not inside of
+ 	 double-quotes, quote some things inside of double-quotes. */
+       if MBTEST(character == '\\')

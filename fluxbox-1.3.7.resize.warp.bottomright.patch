@@ -1,0 +1,49 @@
+diff --git a/src/Window.cc b/src/Window.cc
+index 0f91a9e..935ca9a 100644
+--- a/src/Window.cc
++++ b/src/Window.cc
+@@ -3044,12 +3044,42 @@ void FluxboxWindow::startResizing(int x, int y, ReferenceCorner dir) {
+                            (m_resize_corner == BOTTOM) ? frame().theme()->bottomSideCursor() :
+                                                             frame().theme()->lowerLeftAngleCursor();
+ 
++    // EMG -- move curosr to bottomrightcorner.
++    //        this is a personal force. which
++    //        WILL LIKELY BREAK fluxbox if used
++    //        with a resize method other than
++    //        RIGHTBOTTOM
++    // need to grab the pointer in non-Async mode (arg 5)
++    // warp
++    // ungrab pointer so that fluxbox can take back over
++    // at somepoint between the grab, warp and the move,
++    //    need to trick fluxbox into thinking the new point
++    //    (frame.w, frame.h) is the point of the originating
++    //    buttonpress event. this is done by forcing the
++    //    m_button_grab_? below to the new curors point.
++    // the proper trick will be to set a configuration option.
++    // I'd now like to get fluxbox to not mess with a rectangle.
++    //    maybe comment parent().drawRectangle?
++    grabPointer(fbWindow().window(),
++                false, ButtonReleaseMask,
++                GrabModeAsync, GrabModeSync, None, cursor, CurrentTime);
++
++    XWarpPointer(display, None, fbWindow().window(), 0, 0, 0, 0,
++        frame().width(),
++        frame().height()
++    );
++    ungrabPointer(CurrentTime);
++    // EMG -- end of insertion patch ; still includes two
++    //        m_button_grab_? settings below
++
+     grabPointer(fbWindow().window(),
+                 false, ButtonMotionMask | ButtonReleaseMask,
+                 GrabModeAsync, GrabModeAsync, None, cursor, CurrentTime);
+ 
+-    m_button_grab_x = x;
+-    m_button_grab_y = y;
++//    m_button_grab_x = x;
++//    m_button_grab_y = y;
++    m_button_grab_x = frame().width();
++    m_button_grab_y = frame().height();
+     m_last_resize_x = frame().x();
+     m_last_resize_y = frame().y();
+     m_last_resize_w = frame().width();

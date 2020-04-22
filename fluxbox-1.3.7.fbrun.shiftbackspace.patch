@@ -1,0 +1,17 @@
+diff --git a/src/FbTk/TextBox.cc b/src/FbTk/TextBox.cc
+index 74771a6..bf8e60b 100644
+--- a/src/FbTk/TextBox.cc
++++ b/src/FbTk/TextBox.cc
+@@ -295,6 +295,12 @@ void TextBox::keyPressEvent(XKeyEvent &event) {
+                 }
+                 break;
+             }
++        } else if ((event.state & ShiftMask) == ShiftMask) {
++            switch (ks) {
++            case XK_BackSpace:
++                backspace();
++                break;
++            }
+         }
+ 
+     } else { // no state
